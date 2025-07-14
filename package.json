@@ -1,0 +1,25 @@
+{
+  "name": "sabino-project",
+  "version": "1.0.0",
+  "description": "school eportal application",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "courteous",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "body": "^5.1.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.16.1",
+    "nodemailer": "^7.0.5",
+    "nodemon": "^3.1.10",
+    "parser": "^0.1.4",
+    "stripe": "^18.3.0"
+  }
+}

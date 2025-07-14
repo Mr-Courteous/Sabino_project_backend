@@ -1,0 +1,38 @@
+const express = require("express");
+const app = express();
+const bodyParser = require('body-parser');
+const cors = require('cors'); // Import the cors middleware
+
+const PORT = process.env.PORT || 3000;
+
+// ROUTES
+const RegistrationRoute = require('./Routes/Registration');
+const ScoresUpdateRoute = require('./Routes/ScoresUpdate')
+const GetRoutes = require('./Routes/GetRoutes')
+const LoginRoutes = require ('./Routes/LoginRoutes')
+const PaymentRoute = require ('./Routes/PaymentRoute')
+
+const connectDB = require('./Dbconnection');
+
+connectDB();
+
+// Use CORS middleware to allow requests from any origin
+// You can configure it further if you need to restrict origins, methods, or headers
+app.use(cors());
+
+app.use(bodyParser.json());
+app.use(RegistrationRoute);
+app.use(ScoresUpdateRoute);
+app.use(GetRoutes);
+app.use(LoginRoutes);
+app.use(PaymentRoute);
+
+
+app.get('/', (req, res) => {
+    res.send('Hey, Express server is up and running!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log('Press Ctrl+C to stop the server.');
+});
