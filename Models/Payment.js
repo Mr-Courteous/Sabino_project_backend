@@ -1,3 +1,4 @@
+// models/Payment.js
 const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema({
@@ -6,24 +7,24 @@ const paymentSchema = new mongoose.Schema({
         ref: 'Student', // Reference to your Student model
         required: true
     },
-    stripePaymentIntentId: {
+    paystackReference: { // Changed from stripePaymentIntentId to store Paystack's reference
         type: String,
         required: true,
         unique: true
     },
     amount: {
-        type: Number, // Amount in cents
+        type: Number, // Amount in kobo (Nigerian Naira's smallest unit)
         required: true
     },
     currency: {
         type: String,
         required: true,
-        default: 'usd'
+        default: 'NGN' // Paystack uses 'NGN'
     },
     status: {
         type: String,
         required: true,
-        default: 'pending' // e.g., 'pending', 'succeeded', 'failed', 'requires_action'
+        default: 'pending' // e.g., 'pending', 'success', 'failed', 'abandoned'
     },
     semester: {
         type: String, // e.g., "Fall", "Spring", "Summer"
@@ -35,6 +36,9 @@ const paymentSchema = new mongoose.Schema({
     },
     description: {
         type: String // e.g., "Tuition Fee - Fall 2024"
+    },
+    paidAt: { // New field to store when payment was confirmed by webhook
+        type: Date
     },
     createdAt: {
         type: Date,

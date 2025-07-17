@@ -1,9 +1,8 @@
-// models/Staff.js
-
+// models/Student.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs'); // For password hashing
 
-// Define the schema for the Staff model
+// Define the schema for the Student model
 const StudentSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -42,12 +41,30 @@ const StudentSchema = new mongoose.Schema({
         type: String,
         unique: true, // Registration numbers must be unique
         required: [true, 'Registration number is required']
-    }
+    },
+    // NEW FIELDS for payment tracking (integrated from previous discussions)
+    currentSemesterPaymentStatus: {
+        type: String,
+        enum: ['paid', 'unpaid', 'pending'], // Define possible statuses
+        default: 'unpaid'
+    },
+    lastPaidSemester: {
+        type: String, // e.g., "Fall 2024"
+        default: null
+    },
+    lastPaidAcademicYear: {
+        type: String, // e.g., "2024/2025"
+        default: null
+    },
+    paymentHistory: [{ // Array to store references to payment records
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Payment' // Reference to your Payment model
+    }]
 }, {
     timestamps: true // Adds createdAt and updatedAt fields automatically
 });
 
-// Pre-save hook to hash the password before saving a new staff member
+// Pre-save hook to hash the password before saving a new student
 StudentSchema.pre('save', async function(next) {
     // Only hash the password if it has been modified (or is new)
     if (!this.isModified('password')) {
@@ -62,4 +79,4 @@ StudentSchema.pre('save', async function(next) {
     }
 });
 
-module.exports  = mongoose.model('Student', StudentSchema);
+module.exports = mongoose.model('Student', StudentSchema);
