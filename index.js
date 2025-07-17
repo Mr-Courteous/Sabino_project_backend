@@ -1,7 +1,10 @@
+require('dotenv').config();
 const express = require("express");
 const app = express();
 const bodyParser = require('body-parser');
 const cors = require('cors'); // Import the cors middleware
+require('dotenv').config();
+
 
 const PORT = process.env.PORT || 3000;
 
@@ -15,6 +18,7 @@ const PaymentRoute = require ('./Routes/PaymentRoute')
 const connectDB = require('./Dbconnection');
 
 connectDB();
+
 
 // Use CORS middleware to allow requests from any origin
 // You can configure it further if you need to restrict origins, methods, or headers

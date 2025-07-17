@@ -3,14 +3,17 @@ const router = express.Router();
 const Enrollment = require('../Models/Enrollments.js'); // Make sure this path is correct
 const Student = require('../Models/Students.js'); // To validate student IDs if needed
 const Course = require('../Models/Courses.js'); // To validate course IDs
+const StudentsTokenCheck = require ('./ProtectionMiddlewares.js')
+
+const jwt = require('jsonwebtoken');
 
 
-
+// module.exports = StudentsTokenCheck;
 // --- STUDENT DASHBOARD ROUTE ---
 // GET /api/student/dashboard/:studentId
 // This route retrieves a student's profile and a list of their enrolled courses
 // with associated scores and status.
-router.get('/api/student/dashboard/:studentId', async (req, res) => {
+router.get('/api/student/dashboard/:studentId',StudentsTokenCheck, async (req, res) => {
     const { studentId } = req.params;
 
     try {
@@ -32,7 +35,7 @@ router.get('/api/student/dashboard/:studentId', async (req, res) => {
             semester: enrollment.semester,
             course: {
                 courseId: enrollment.course.courseId, // Assuming courseId is the code
-                courseName: enrollment.course.courseName, // Assuming courseName is the title
+                courseName: enrollment.course.courseName, // Assuming courseName is the title  
                 department: enrollment.course.department,
                 credits: enrollment.course.credits,
                 description: enrollment.course.description

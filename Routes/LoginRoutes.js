@@ -89,7 +89,7 @@ router.post('/api/student/login', async (req, res) => {
             { id: student._id, role: 'student' },
             process.env.JWT_SECRET || 'your_jwt_secret', // Using process.env.JWT_SECRET (recommended) or fallback
             { expiresIn: '1h' } // Token expires in 1 hour
-        );
+        ); 
 
         // 4. Prepare the student response object
         const studentResponse = student.toObject(); // Convert Mongoose document to plain JavaScript object
