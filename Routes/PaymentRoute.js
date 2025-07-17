@@ -4,7 +4,7 @@ const router = express.Router();
 const axios = require('axios'); // For making HTTP requests to Paystack
 const crypto = require('crypto'); // For webhook verification
 const Payment = require('../Models/Payment');
-const Student = require("../Models/Students.js") // Assuming this path is correct
+const Student = require("../Models/Students.js"); // Assuming this path is correct
 
 // Middleware to protect routes (example - replace with your actual auth logic)
 const protect = (req, res, next) => {
@@ -28,7 +28,7 @@ const PAYSTACK_API_BASE_URL = 'https://api.paystack.co';
 // @desc    Initiate a Paystack transaction
 // @access  Private (Student)
 router.post('/initiate-payment', protect, async (req, res) => {
-    const { amount, studentId, semester, academicYear, description, email } = req.body; // amount in Naira
+    const { amount, studentId, semester, academicYear, description, email, callback_url } = req.body; // Added callback_url from frontend
 
     // Basic validation
     if (!amount || !studentId || !semester || !academicYear || !email) {
@@ -60,7 +60,7 @@ router.post('/initiate-payment', protect, async (req, res) => {
                     academic_year: academicYear,
                     description: description || `Fee payment for ${semester} ${academicYear}`
                 },
-                // callback_url: 'YOUR_FRONTEND_PAYMENT_SUCCESS_URL' // Optional: Paystack can redirect here after payment
+                callback_url: callback_url // Use the callback_url sent from frontend
             },
             {
                 headers: {
@@ -73,10 +73,17 @@ router.post('/initiate-payment', protect, async (req, res) => {
         if (paystackResponse.data && paystackResponse.data.status) {
             const paystackData = paystackResponse.data.data;
 
+            // CRITICAL CHECK: Ensure Paystack reference is present
+            if (!paystackData.reference) {
+                console.error('Paystack initialization successful but reference is missing:', paystackData);
+                return res.status(500).json({ message: 'Failed to initiate payment: Paystack reference missing.' });
+            }
+
             // Save a pending payment record in your database
+            // This record now *always* has a valid Paystack reference
             const newPayment = new Payment({
                 studentId: student._id,
-                paystackReference: paystackData.reference, // Paystack's transaction reference
+                paystackReference: paystackData.reference, // Paystack's transaction reference (guaranteed non-null here)
                 amount: amountInKobo,
                 currency: 'NGN',
                 status: 'pending', // Initial status
@@ -99,6 +106,10 @@ router.post('/initiate-payment', protect, async (req, res) => {
 
     } catch (error) {
         console.error('Error initiating payment:', error.response ? error.response.data : error.message);
+        // Check for specific duplicate key error from MongoDB if it's not null-related
+        if (error.code === 11000) { // MongoDB duplicate key error code
+            return res.status(409).json({ message: 'A payment for this reference already exists or a unique constraint was violated.', error: error.message });
+        }
         res.status(500).json({ message: 'Failed to initiate payment.', error: error.response ? error.response.data.message : error.message });
     }
 });
@@ -124,7 +135,8 @@ router.get('/verify-payment/:reference', protect, async (req, res) => {
         if (paystackData && paystackData.status === 'success') {
             const { student_id, semester, academic_year } = paystackData.metadata;
 
-            // Update your internal payment record
+            // Find and update your internal payment record
+            // Use findOneAndUpdate to handle cases where the record might not exist yet (less common with your flow)
             const updatedPayment = await Payment.findOneAndUpdate(
                 { paystackReference: reference },
                 {
@@ -135,12 +147,20 @@ router.get('/verify-payment/:reference', protect, async (req, res) => {
                 { new: true }
             );
 
+            if (!updatedPayment) {
+                // This case means the initiate-payment record wasn't found.
+                // This could happen if the initial save failed, or if webhook was faster.
+                // For robustness, you might create it here, but your webhook handles it better.
+                console.warn(`Verify: Payment record with reference ${reference} not found for update.`);
+                // Proceed to update student even if payment record wasn't found/updated by this call
+            }
+
             // Update student's payment status
             await Student.findByIdAndUpdate(student_id, {
                 currentSemesterPaymentStatus: 'paid',
                 lastPaidSemester: semester,
                 lastPaidAcademicYear: academic_year,
-                $addToSet: { paymentHistory: updatedPayment._id }
+                $addToSet: { paymentHistory: updatedPayment ? updatedPayment._id : null } // Add payment ID if available
             });
 
             res.status(200).json({ message: 'Payment verified successfully.', payment: updatedPayment });
@@ -168,7 +188,17 @@ router.post('/webhook', express.json(), async (req, res) => { // Use express.jso
         if (event.event === 'charge.success') {
             const paystackData = event.data;
             const reference = paystackData.reference;
-            const { student_id, semester, academic_year } = paystackData.metadata;
+            // Ensure metadata fields are safely accessed
+            const student_id = paystackData.metadata?.student_id;
+            const semester = paystackData.metadata?.semester;
+            const academic_year = paystackData.metadata?.academic_year;
+            const description = paystackData.metadata?.description;
+
+
+            if (!student_id || !semester || !academic_year) {
+                console.error('Webhook: Missing essential metadata in charge.success event for reference:', reference);
+                return res.status(400).json({ received: true, message: 'Missing metadata' });
+            }
 
             try {
                 // Find and update the payment record
@@ -192,8 +222,9 @@ router.post('/webhook', express.json(), async (req, res) => { // Use express.jso
                     });
                     console.log(`Webhook: Student ${student_id} payment status updated to paid for ${semester} ${academic_year}.`);
                 } else {
+                    // This is the crucial 'else' block for the webhook.
+                    // If the payment record wasn't found (e.g., initial save failed or race condition), create it.
                     console.warn(`Webhook: Payment record with reference ${reference} not found. Creating new one.`);
-                    // If for some reason the payment record wasn't created before webhook (unlikely with initiate-payment flow)
                     const newPayment = new Payment({
                         studentId: student_id,
                         paystackReference: reference,
@@ -202,7 +233,7 @@ router.post('/webhook', express.json(), async (req, res) => { // Use express.jso
                         status: 'success',
                         semester: semester,
                         academicYear: academic_year,
-                        description: paystackData.metadata.description || `Fee payment for ${semester} ${academicYear}`,
+                        description: description || `Fee payment for ${semester} ${academic_year}`,
                         paidAt: paystackData.paid_at,
                         createdAt: Date.now(),
                         updatedAt: Date.now()
@@ -214,6 +245,7 @@ router.post('/webhook', express.json(), async (req, res) => { // Use express.jso
                         lastPaidAcademicYear: academic_year,
                         $addToSet: { paymentHistory: newPayment._id }
                     });
+                    console.log(`Webhook: New payment record created and student updated for ${reference}.`);
                 }
 
             } catch (dbError) {
