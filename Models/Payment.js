@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const paymentSchema = new mongoose.Schema({
+const TransactionSchema = new mongoose.Schema({
     studentId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Student', // Reference to your Student model
@@ -49,4 +49,4 @@ const paymentSchema = new mongoose.Schema({
     }
 });
 
-module.exports = mongoose.model('Payment', paymentSchema);
+module.exports = mongoose.model('Transaction', TransactionSchema);

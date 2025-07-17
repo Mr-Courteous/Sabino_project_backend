@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios'); // For making HTTP requests to Paystack
 const crypto = require('crypto'); // For webhook verification
-const Payment = require('../Models/Payment');
+const Transaction = require('../Models/Payment'); // <--- CHANGED HERE: now imports as Transaction
 const Student = require("../Models/Students.js"); // Assuming this path is correct
 
 // Middleware to protect routes (example - replace with your actual auth logic)
@@ -81,7 +81,7 @@ router.post('/initiate-payment', protect, async (req, res) => {
 
             // Save a pending payment record in your database
             // This record now *always* has a valid Paystack reference
-            const newPayment = new Payment({
+            const newTransaction = new Transaction({ // <--- CHANGED HERE
                 studentId: student._id,
                 paystackReference: paystackData.reference, // Paystack's transaction reference (guaranteed non-null here)
                 amount: amountInKobo,
@@ -91,13 +91,13 @@ router.post('/initiate-payment', protect, async (req, res) => {
                 academicYear: academicYear,
                 description: description || `Fee payment for ${semester} ${academicYear}`
             });
-            await newPayment.save();
+            await newTransaction.save();
 
             res.status(200).json({
                 authorization_url: paystackData.authorization_url, // URL to redirect user to
                 access_code: paystackData.access_code, // Access code for inline payment
                 reference: paystackData.reference, // Paystack's transaction reference
-                paymentId: newPayment._id // Your internal payment ID
+                paymentId: newTransaction._id // <--- CHANGED HERE
             });
         } else {
             console.error('Paystack initiation failed:', paystackResponse.data);
@@ -137,7 +137,7 @@ router.get('/verify-payment/:reference', protect, async (req, res) => {
 
             // Find and update your internal payment record
             // Use findOneAndUpdate to handle cases where the record might not exist yet (less common with your flow)
-            const updatedPayment = await Payment.findOneAndUpdate(
+            const updatedTransaction = await Transaction.findOneAndUpdate( // <--- CHANGED HERE
                 { paystackReference: reference },
                 {
                     status: 'success',
@@ -147,7 +147,7 @@ router.get('/verify-payment/:reference', protect, async (req, res) => {
                 { new: true }
             );
 
-            if (!updatedPayment) {
+            if (!updatedTransaction) { // <--- CHANGED HERE
                 // This case means the initiate-payment record wasn't found.
                 // This could happen if the initial save failed, or if webhook was faster.
                 // For robustness, you might create it here, but your webhook handles it better.
@@ -160,10 +160,10 @@ router.get('/verify-payment/:reference', protect, async (req, res) => {
                 currentSemesterPaymentStatus: 'paid',
                 lastPaidSemester: semester,
                 lastPaidAcademicYear: academic_year,
-                $addToSet: { paymentHistory: updatedPayment ? updatedPayment._id : null } // Add payment ID if available
+                $addToSet: { paymentHistory: updatedTransaction ? updatedTransaction._id : null } // <--- CHANGED HERE
             });
 
-            res.status(200).json({ message: 'Payment verified successfully.', payment: updatedPayment });
+            res.status(200).json({ message: 'Payment verified successfully.', payment: updatedTransaction }); // <--- CHANGED HERE
         } else {
             res.status(400).json({ message: 'Payment verification failed.', details: paystackData.gateway_response || 'Unknown status' });
         }
@@ -202,7 +202,7 @@ router.post('/webhook', express.json(), async (req, res) => { // Use express.jso
 
             try {
                 // Find and update the payment record
-                const updatedPayment = await Payment.findOneAndUpdate(
+                const updatedTransaction = await Transaction.findOneAndUpdate( // <--- CHANGED HERE
                     { paystackReference: reference },
                     {
                         status: 'success',
@@ -212,20 +212,20 @@ router.post('/webhook', express.json(), async (req, res) => { // Use express.jso
                     { new: true }
                 );
 
-                if (updatedPayment) {
+                if (updatedTransaction) { // <--- CHANGED HERE
                     // Update student's payment status
                     await Student.findByIdAndUpdate(student_id, {
                         currentSemesterPaymentStatus: 'paid',
                         lastPaidSemester: semester,
                         lastPaidAcademicYear: academic_year,
-                        $addToSet: { paymentHistory: updatedPayment._id }
+                        $addToSet: { paymentHistory: updatedTransaction._id } // <--- CHANGED HERE
                     });
                     console.log(`Webhook: Student ${student_id} payment status updated to paid for ${semester} ${academic_year}.`);
                 } else {
                     // This is the crucial 'else' block for the webhook.
                     // If the payment record wasn't found (e.g., initial save failed or race condition), create it.
                     console.warn(`Webhook: Payment record with reference ${reference} not found. Creating new one.`);
-                    const newPayment = new Payment({
+                    const newTransaction = new Transaction({ // <--- CHANGED HERE
                         studentId: student_id,
                         paystackReference: reference,
                         amount: paystackData.amount, // amount from webhook is in kobo
@@ -238,12 +238,12 @@ router.post('/webhook', express.json(), async (req, res) => { // Use express.jso
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     });
-                    await newPayment.save();
+                    await newTransaction.save();
                     await Student.findByIdAndUpdate(student_id, {
                         currentSemesterPaymentStatus: 'paid',
                         lastPaidSemester: semester,
                         lastPaidAcademicYear: academic_year,
-                        $addToSet: { paymentHistory: newPayment._id }
+                        $addToSet: { paymentHistory: newTransaction._id } // <--- CHANGED HERE
                     });
                     console.log(`Webhook: New payment record created and student updated for ${reference}.`);
                 }
@@ -257,7 +257,7 @@ router.post('/webhook', express.json(), async (req, res) => { // Use express.jso
             const reference = paystackData.reference;
 
             try {
-                await Payment.findOneAndUpdate(
+                await Transaction.findOneAndUpdate( // <--- CHANGED HERE
                     { paystackReference: reference },
                     {
                         status: 'failed',
