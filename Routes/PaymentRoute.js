@@ -5,6 +5,8 @@ const axios = require('axios'); // For making HTTP requests to Paystack
 const crypto = require('crypto'); // For webhook verification
 const Transaction = require('../Models/Payment'); // <--- CHANGED HERE: now imports as Transaction
 const Student = require("../Models/Students.js"); // Assuming this path is correct
+const StudentsTokenCheck = require ('./ProtectionMiddlewares.js')
+
 
 // Middleware to protect routes (example - replace with your actual auth logic)
 const protect = (req, res, next) => {
@@ -27,7 +29,7 @@ const PAYSTACK_API_BASE_URL = 'https://api.paystack.co';
 // @route   POST /api/initiate-payment
 // @desc    Initiate a Paystack transaction
 // @access  Private (Student)
-router.post('/initiate-payment', protect, async (req, res) => {
+router.post('/initiate-payment', StudentsTokenCheck, async (req, res) => {
     const { amount, studentId, semester, academicYear, description, email, callback_url } = req.body; // Added callback_url from frontend
 
     // Basic validation
