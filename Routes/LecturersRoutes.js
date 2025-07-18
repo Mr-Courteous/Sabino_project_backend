@@ -109,7 +109,7 @@ router.get('/api/lecturer/dashboard/:lecturerId', AllProtection, async (req, res
             message: `Dashboard data for lecturer: ${lecturer.name}`,
             lecturerProfile: lecturerProfile,
             myCourses: formattedCourses,
-            recentNotifications: recentNotifications // Sending mock notifications for now
+            // recentNotifications: recentNotifications // Sending mock notifications for now
         });
 
     } catch (error) {
@@ -173,22 +173,26 @@ router.get('/api/lecturer/:lecturerId/courses-taught', AllProtection, async (req
 
 // GET ROUTE: Get all students enrolled in a particular course
 // This route allows a lecturer to retrieve a list of students enrolled in a specific course.
+// It now expects the 'courseId' in the URL path to be the human-readable course code (e.g., "BIO 203").
 // Optional query parameters: academicYear, semester
-// Example: GET /api/grades/course/60d5ec49f8c7a3001c8a4d7c/students?academicYear=2025-2026&semester=Fall
+// Example: GET /api/grades/course/BIO 203/students?academicYear=2025-2026&semester=Fall
 router.get('/api/grades/course/:courseId/students', AllProtection, async (req, res) => {
-    const { courseId } = req.params;
-    const { academicYear, semester } = req.query; // Get academicYear and semester from query parameters
+    const { courseId } = req.params; // This is now the human-readable course code
+    const { academicYear, semester } = req.query;
 
     try {
-        // 1. Validate if the Course exists
-        const courseExists = await Course.findById(courseId);
+        // 1. Find the Course document using the human-readable courseId
+        const courseExists = await Course.findOne({ courseId: courseId });
         if (!courseExists) {
-            return res.status(404).json({ message: 'Course not found.' });
+            return res.status(404).json({ message: `Course with code '${courseId}' not found.` });
         }
+
+        // Use the MongoDB _id of the found course for the enrollment query
+        const mongoCourseId = courseExists._id;
 
         // Build the query object for enrollments
         let query = {
-            course: courseId
+            course: mongoCourseId // Use the MongoDB _id here
         };
 
         if (academicYear) {
@@ -199,15 +203,13 @@ router.get('/api/grades/course/:courseId/students', AllProtection, async (req, r
         }
 
         // 2. Find all enrollments matching the criteria
-        // Use .populate('student') to get the full student document details
-        // Use .populate('course', 'title courseCode') to get specific course details
         const enrollments = await Enrollment.find(query)
-            .populate('student', 'name email phoneNumber registrationNumber department') // Select specific student fields
-            .populate('course', 'courseName courseId department') // Select specific course fields (updated field names)
-            .lean(); // Use .lean() for faster query execution if you don't need Mongoose document methods
+            .populate('student', 'name email phoneNumber registrationNumber department')
+            .populate('course', 'courseName courseId department')
+            .lean();
 
         if (!enrollments || enrollments.length === 0) {
-            return res.status(404).json({ message: 'No students found enrolled in this course for the specified criteria.' });
+            return res.status(404).json({ message: `No students found enrolled in course '${courseId}' for the specified criteria.` });
         }
 
         // Extract student details from enrollments and include their scores
@@ -218,9 +220,9 @@ router.get('/api/grades/course/:courseId/students', AllProtection, async (req, r
             phoneNumber: enrollment.student.phoneNumber,
             registrationNumber: enrollment.student.registrationNumber,
             department: enrollment.student.department,
-            courseTitle: enrollment.course.courseName, // Changed from .title
-            courseCode: enrollment.course.courseId,    // Changed from .courseCode
-            enrollmentId: enrollment._id, // Include enrollment ID for reference
+            courseTitle: enrollment.course.courseName,
+            courseCode: enrollment.course.courseId,
+            enrollmentId: enrollment._id,
             academicYear: enrollment.academicYear,
             semester: enrollment.semester,
             caScore: enrollment.caScore,
@@ -230,7 +232,7 @@ router.get('/api/grades/course/:courseId/students', AllProtection, async (req, r
         }));
 
         res.status(200).json({
-            message: `Students enrolled in ${courseExists.courseName} (${courseExists.courseId})`, // Changed from .courseCode
+            message: `Students enrolled in ${courseExists.courseName} (${courseExists.courseId})`,
             totalStudents: studentsEnrolled.length,
             students: studentsEnrolled
         });
@@ -426,28 +428,24 @@ router.get('/api/students/search', AllProtection, async (req, res) => {
 // This route allows authorized users (lecturers, admins) to download an Excel-compatible CSV
 // of student names and their scores for a particular course.
 // Optional query parameters: academicYear, semester
-// Example: GET /api/grades/course/60d5ec49f8c7a3001c8a4d7c/students/export?academicYear=2025-2026&semester=Fall
-router.get('/api/grades/course/:courseId/students/export', async (req, res) => {
-    const { courseId } = req.params;
+// Example: GET /api/grades/course/BIO 203/students/export?academicYear=2025-2026&semester=Fall
+router.get('/api/grades/course/:courseId/students/export', AllProtection, async (req, res) => {
+    const { courseId } = req.params; // This is now the human-readable course code
     const { academicYear, semester } = req.query;
 
-    // Optional: Implement role-based access control here.
-    // Only lecturers or admins should typically be able to download grade sheets.
-    // Assuming 'req.user.role' is available from StudentsTokenCheck middleware.
-    // if (req.user.role !== 'lecturer' && req.user.role !== 'admin') {
-    //     return res.status(403).json({ message: 'Forbidden: You do not have permission to export grades.' });
-    // }
-
     try {
-        // 1. Validate if the Course exists
-        const courseExists = await Course.findById(courseId);
+        // 1. Find the Course document using the human-readable courseId
+        const courseExists = await Course.findOne({ courseId: courseId });
         if (!courseExists) {
-            return res.status(404).json({ message: 'Course not found.' });
+            return res.status(404).json({ message: `Course with code '${courseId}' not found.` });
         }
+
+        // Use the MongoDB _id of the found course for the enrollment query
+        const mongoCourseId = courseExists._id;
 
         // Build the query object for enrollments
         let query = {
-            course: courseId
+            course: mongoCourseId // Use the MongoDB _id here
         };
 
         if (academicYear) {
@@ -464,7 +462,7 @@ router.get('/api/grades/course/:courseId/students/export', async (req, res) => {
             .lean();
 
         if (!enrollments || enrollments.length === 0) {
-            return res.status(404).json({ message: 'No students found enrolled in this course for the specified criteria to export.' });
+            return res.status(404).json({ message: `No students found enrolled in course '${courseId}' for the specified criteria to export.` });
         }
 
         // 3. Prepare data for CSV
@@ -529,7 +527,7 @@ router.get('/api/grades/course/:courseId/students/export', async (req, res) => {
 // to update student scores for a particular course.
 // It expects a file upload with the field name 'gradesFile'.
 router.post('/api/grades/course/:courseId/upload-grades', upload.single('gradesFile'), AllProtection, async (req, res) => {
-    const { courseId } = req.params;
+    const { courseId } = req.params; // This is now the human-readable course code
 
     // Optional: Implement role-based access control here.
     // Ensure only authorized roles (e.g., 'lecturer', 'admin') can upload grades.
@@ -555,10 +553,14 @@ router.post('/api/grades/course/:courseId/upload-grades', upload.single('gradesF
     let processedCount = 0;
 
     try {
-        const courseExists = await Course.findById(courseId);
+        // Find the Course document using the human-readable courseId
+        const courseExists = await Course.findOne({ courseId: courseId });
         if (!courseExists) {
-            return res.status(404).json({ message: 'Course not found.' });
+            return res.status(404).json({ message: `Course with code '${courseId}' not found.` });
         }
+
+        // Use the MongoDB _id of the found course for the enrollment query
+        const mongoCourseId = courseExists._id;
 
         // Parse the CSV file
         bufferStream
@@ -603,7 +605,7 @@ router.post('/api/grades/course/:courseId/upload-grades', upload.single('gradesF
 
                     if (Object.keys(updateFields).length > 0) {
                         const updatedEnrollment = await Enrollment.findOneAndUpdate(
-                            { _id: enrollmentId, course: courseId }, // Ensure enrollment belongs to this course
+                            { _id: enrollmentId, course: mongoCourseId }, // Use mongoCourseId here
                             { $set: updateFields },
                             { new: true } // Return the updated document
                         );
