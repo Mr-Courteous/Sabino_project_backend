@@ -3,7 +3,7 @@ const router = express.Router();
 const Enrollment = require('../Models/Enrollments.js'); // Make sure this path is correct
 const Student = require('../Models/Students.js'); // To validate student IDs if needed
 const Course = require('../Models/Courses.js'); // To validate course IDs
-const StudentsTokenCheck = require('./ProtectionMiddlewares.js'); // Ensure this path is correct for your middleware
+const AllProtection = require('./ProtectionMiddlewares.js'); // Ensure this path is correct for your middleware
 
 const jwt = require('jsonwebtoken'); // Keep this if you use jwt directly elsewhere, otherwise it's implicitly used by StudentsTokenCheck
 
@@ -12,7 +12,7 @@ const jwt = require('jsonwebtoken'); // Keep this if you use jwt directly elsewh
 // GET /api/student/dashboard/:studentId
 // This route retrieves a student's profile and a list of their enrolled courses
 // with associated scores and status.
-router.get('/api/student/dashboard/:studentId', StudentsTokenCheck, async (req, res) => {
+router.get('/api/student/dashboard/:studentId', AllProtection, async (req, res) => {
     const { studentId } = req.params;
 
     // Security check: Ensure the authenticated user (from token) matches the requested studentId

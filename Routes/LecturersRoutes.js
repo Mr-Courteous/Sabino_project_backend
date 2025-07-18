@@ -4,7 +4,7 @@ const Enrollment = require('../Models/Enrollments.js'); // Make sure this path i
 const Student = require('../Models/Students.js'); // To validate student IDs if needed
 const Course = require('../Models/Courses.js'); // To validate course IDs
 const Lecturer = require('../Models/Lecturers.js'); // <--- NEW: Import Lecturer model
-const StudentsTokenCheck = require('./ProtectionMiddlewares.js'); // Ensure this path is correct for your middleware
+const AllProtection = require('./ProtectionMiddlewares.js'); // Ensure this path is correct for your middleware
 const { stringify } = require('csv-stringify'); // <--- Add this line!
 const multer = require('multer'); // <--- NEW: Import multer
 const csv = require('csv-parser'); // <--- NEW: Import csv-parser
@@ -34,12 +34,12 @@ const upload = multer({
 // --- NEW ROUTE: Lecturer Dashboard ---
 // GET /api/lecturer/dashboard/:lecturerId
 // This route retrieves a lecturer's profile.
-router.get('/api/lecturer/dashboard/:lecturerId', StudentsTokenCheck, async (req, res) => {
+router.get('/api/lecturer/dashboard/:lecturerId', AllProtection, async (req, res) => { // <--- Using ProtectRoute
     const { lecturerId } = req.params;
 
     // Security check: Ensure the authenticated user (from token) matches the requested lecturerId
-    // Assuming req.user contains the ID from the JWT payload.
-    if (req.user !== lecturerId) {
+    // and that the user is actually a lecturer.
+    if (req.user.id !== lecturerId || req.user.role !== 'lecturer') { // <--- Corrected check for req.user object
         return res.status(403).json({ message: 'Forbidden: You can only view your own dashboard.' });
     }
 
@@ -50,14 +50,66 @@ router.get('/api/lecturer/dashboard/:lecturerId', StudentsTokenCheck, async (req
             return res.status(404).json({ message: 'Lecturer not found.' });
         }
 
-        // Prepare the lecturer response object, excluding sensitive data
-        const lecturerProfile = lecturer.toObject();
-        delete lecturerProfile.password; // Remove password for security
-        delete lecturerProfile.__v; // Remove version key
+        // Prepare the lecturer response object, explicitly selecting fields
+        const lecturerProfile = {
+            _id: lecturer._id,
+            name: lecturer.name,
+            employeeId: lecturer.employeeId,
+            department: lecturer.department,
+            email: lecturer.email,
+            phoneNumber: lecturer.phoneNumber,
+            address: lecturer.address,
+            position: lecturer.position,
+            qualifications: lecturer.qualifications,
+            coursesTaught: lecturer.coursesTaught,
+            dateOfEmployment: lecturer.dateOfEmployment,
+            officeLocation: lecturer.officeLocation,
+            researchInterests: lecturer.researchInterests
+            // Password and __v are implicitly excluded by selecting specific fields
+        };
+
+
+        // --- Fetch courses taught by this lecturer ---
+        // Assuming 'coursesTaught' on the Lecturer model stores course IDs
+        // Filter out any non-ObjectId values from coursesTaught before querying
+        const validCourseIds = lecturer.coursesTaught.filter(id => {
+            // A basic check for a valid ObjectId string (24 hex characters)
+            return typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id);
+        });
+
+        const myCourses = await Course.find({
+            _id: { $in: validCourseIds } // Use the filtered array
+        }).lean();
+
+        // For the frontend display, we need 'id', 'code', 'title', 'credits', 'level', 'students'
+        const formattedCourses = myCourses.map(course => ({
+            id: course._id.toString(),
+            code: course.courseId, // Assuming courseId is the code (e.g., "CS101")
+            title: course.courseName, // Assuming courseName is the title (e.g., "Introduction to Programming")
+            credits: course.credits,
+            level: course.department, // Using department as level for display as per frontend interface
+            students: 0 // Placeholder: You would need to query Enrollments to get actual student count per course
+        }));
+
+        // --- Fetch recent notifications related to this lecturer's courses or department ---
+        // This part depends heavily on how your Notification model is structured and
+        // how notifications are associated with lecturers/courses.
+        // For simplicity, let's return some mock or a very basic query for now.
+        // A real implementation would query a Notification model.
+        const recentNotifications = [
+            { id: 'notif1', title: 'Assignment 1 Due', message: 'Reminder: Assignment 1 for CS101 is due tomorrow.', date: '2025-07-17' },
+            { id: 'notif2', title: 'Class Cancelled', message: 'CS201 class on Friday is cancelled.', date: '2025-07-16' },
+        ];
+        // In a real scenario, you'd query your Notification model:
+        // const notifications = await Notification.find({ recipientLecturerId: lecturerId }).sort({ createdAt: -1 }).limit(3).lean();
+        // And then format them for the frontend.
+
 
         res.status(200).json({
             message: `Dashboard data for lecturer: ${lecturer.name}`,
-            lecturerProfile: lecturerProfile
+            lecturerProfile: lecturerProfile,
+            myCourses: formattedCourses,
+            recentNotifications: recentNotifications // Sending mock notifications for now
         });
 
     } catch (error) {
@@ -67,12 +119,63 @@ router.get('/api/lecturer/dashboard/:lecturerId', StudentsTokenCheck, async (req
 });
 
 
+// --- NEW ROUTE: Get all courses taught by a specific lecturer ---
+// GET /api/lecturer/:lecturerId/courses-taught
+router.get('/api/lecturer/:lecturerId/courses-taught', AllProtection, async (req, res) => {
+    const { lecturerId } = req.params;
+
+    // Authorization check: Only the specific lecturer or an admin can view these courses
+    if (req.user.id !== lecturerId || req.user.role !== 'lecturer') {
+        return res.status(403).json({ message: 'Forbidden: You do not have permission to view these courses.' });
+    }
+
+    try {
+        const lecturer = await Lecturer.findById(lecturerId).lean();
+        if (!lecturer) {
+            return res.status(404).json({ message: 'Lecturer not found.' });
+        }
+
+        // Filter out any non-ObjectId values from coursesTaught before querying
+        const validCourseIds = lecturer.coursesTaught.filter(id => {
+            return typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id);
+        });
+
+        const courses = await Course.find({
+            _id: { $in: validCourseIds }
+        }).lean();
+
+        // Format courses similar to how they are formatted for the dashboard
+        const formattedCourses = courses.map(course => ({
+            id: course._id.toString(),
+            code: course.courseId,
+            title: course.courseName,
+            credits: course.credits,
+            department: course.department, // Keep department as is
+            description: course.description,
+            // You might want to fetch actual student counts here if needed,
+            // but for a simple list, it might not be necessary.
+            students: 0 // Placeholder for student count
+        }));
+
+        res.status(200).json({
+            message: `Courses taught by ${lecturer.name} retrieved successfully.`,
+            totalCourses: formattedCourses.length,
+            courses: formattedCourses
+        });
+
+    } catch (error) {
+        console.error('Error fetching lecturer taught courses:', error);
+        res.status(500).json({ message: 'Server error while fetching lecturer taught courses.' });
+    }
+});
+
+
 
 // GET ROUTE: Get all students enrolled in a particular course
 // This route allows a lecturer to retrieve a list of students enrolled in a specific course.
 // Optional query parameters: academicYear, semester
 // Example: GET /api/grades/course/60d5ec49f8c7a3001c8a4d7c/students?academicYear=2025-2026&semester=Fall
-router.get('/api/grades/course/:courseId/students', async (req, res) => {
+router.get('/api/grades/course/:courseId/students', AllProtection, async (req, res) => {
     const { courseId } = req.params;
     const { academicYear, semester } = req.query; // Get academicYear and semester from query parameters
 
@@ -265,7 +368,7 @@ router.get('/api/students/department/:departmentName', async (req, res) => {
 // by name or registration number.
 // Query parameters: name (partial match), registrationNumber (exact or partial match)
 // Example: GET /api/students/search?name=john&registrationNumber=REG123
-router.get('/api/students/search', StudentsTokenCheck, async (req, res) => {
+router.get('/api/students/search', AllProtection, async (req, res) => {
     const { name, registrationNumber } = req.query;
 
     // Optional: Implement role-based access control here.
@@ -425,7 +528,7 @@ router.get('/api/grades/course/:courseId/students/export', async (req, res) => {
 // This route allows authorized users (lecturers, admins) to upload a CSV file
 // to update student scores for a particular course.
 // It expects a file upload with the field name 'gradesFile'.
-router.post('/api/grades/course/:courseId/upload-grades', upload.single('gradesFile'), StudentsTokenCheck, async (req, res) => {
+router.post('/api/grades/course/:courseId/upload-grades', upload.single('gradesFile'), AllProtection, async (req, res) => {
     const { courseId } = req.params;
 
     // Optional: Implement role-based access control here.

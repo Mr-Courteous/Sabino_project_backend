@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const StudentsTokenCheck = (req, res, next) => {
+const AllProtection = (req, res, next) => {
     // 1. Check for Authorization header
     const authHeader = req.headers.authorization;
 
@@ -14,10 +14,13 @@ const StudentsTokenCheck = (req, res, next) => {
     try {
         // 3. Verify token
         // jwt.verify automatically checks for expiration and throws TokenExpiredError
+        // The JWT payload for lecturers is { id: lecturer._id, role: 'lecturer' }
+        // The JWT payload for students (if any) would be { id: student._id, role: 'student' }
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Attach decoded payload (student ID) to the request
-        req.user = decoded.id; // Assuming 'id' is what you put in the token payload for the student's _id
+        // Attach decoded payload (user ID and role) to the request
+        // Now req.user will be an object like { id: 'someUserId', role: 'student' } or { id: 'someLecturerId', role: 'lecturer' }
+        req.user = { id: decoded.id, role: decoded.role };
 
         // Proceed to the next middleware or route handler
         next();
@@ -37,4 +40,5 @@ const StudentsTokenCheck = (req, res, next) => {
     }
 };
 
-module.exports = StudentsTokenCheck;
+
+module.exports = AllProtection;
