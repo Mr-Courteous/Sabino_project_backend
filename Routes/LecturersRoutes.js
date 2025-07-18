@@ -3,6 +3,7 @@ const router = express.Router();
 const Enrollment = require('../Models/Enrollments.js'); // Make sure this path is correct
 const Student = require('../Models/Students.js'); // To validate student IDs if needed
 const Course = require('../Models/Courses.js'); // To validate course IDs
+const Lecturer = require('../Models/Lecturers.js'); // <--- NEW: Import Lecturer model
 const StudentsTokenCheck = require('./ProtectionMiddlewares.js'); // Ensure this path is correct for your middleware
 const { stringify } = require('csv-stringify'); // <--- Add this line!
 const multer = require('multer'); // <--- NEW: Import multer
@@ -29,6 +30,42 @@ const upload = multer({
         fileSize: 5 * 1024 * 1024 // 5 MB file size limit
     }
 });
+
+// --- NEW ROUTE: Lecturer Dashboard ---
+// GET /api/lecturer/dashboard/:lecturerId
+// This route retrieves a lecturer's profile.
+router.get('/api/lecturer/dashboard/:lecturerId', StudentsTokenCheck, async (req, res) => {
+    const { lecturerId } = req.params;
+
+    // Security check: Ensure the authenticated user (from token) matches the requested lecturerId
+    // Assuming req.user contains the ID from the JWT payload.
+    if (req.user !== lecturerId) {
+        return res.status(403).json({ message: 'Forbidden: You can only view your own dashboard.' });
+    }
+
+    try {
+        // Find the lecturer's profile
+        const lecturer = await Lecturer.findById(lecturerId).lean(); // Use .lean() for faster retrieval
+        if (!lecturer) {
+            return res.status(404).json({ message: 'Lecturer not found.' });
+        }
+
+        // Prepare the lecturer response object, excluding sensitive data
+        const lecturerProfile = lecturer.toObject();
+        delete lecturerProfile.password; // Remove password for security
+        delete lecturerProfile.__v; // Remove version key
+
+        res.status(200).json({
+            message: `Dashboard data for lecturer: ${lecturer.name}`,
+            lecturerProfile: lecturerProfile
+        });
+
+    } catch (error) {
+        console.error('Error fetching lecturer dashboard data:', error);
+        res.status(500).json({ message: 'Server error while fetching lecturer dashboard data.' });
+    }
+});
+
 
 
 // GET ROUTE: Get all students enrolled in a particular course
