@@ -172,7 +172,7 @@ router.post('/api/register/lecturer', async (req, res) => {
         const formattedSerialNumber = String(nextSerialNumber).padStart(3, '0');
 
         // Construct the full employee ID
-        const employeeId = `${SCHOOL_NAME}/${department}/${formattedSerialNumber}`;
+        const employeeId = `INSTRUCTOR/${department}/${formattedSerialNumber}`;
 
         // Create a new lecturer instance
         const newLecturer = new Lecturer({

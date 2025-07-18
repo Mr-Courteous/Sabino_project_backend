@@ -11,9 +11,11 @@ const PORT = process.env.PORT || 3000;
 // ROUTES
 const RegistrationRoute = require('./Routes/Registration');
 const ScoresUpdateRoute = require('./Routes/ScoresUpdate')
-const GetRoutes = require('./Routes/GetRoutes')
+const GetRoutes = require('./Routes/StudentsGetRoutes')
 const LoginRoutes = require ('./Routes/LoginRoutes')
 const PaymentRoute = require ('./Routes/PaymentRoute')
+const LecturersGetRoutes = require ('./Routes/LecturersRoutes')
+ 
 
 const connectDB = require('./Dbconnection');
 
@@ -30,7 +32,7 @@ app.use(ScoresUpdateRoute);
 app.use(GetRoutes);
 app.use(LoginRoutes);
 app.use(PaymentRoute);
-
+app.use(LecturersGetRoutes);
 
 app.get('/', (req, res) => {
     res.send('Hey, Express server is up and running!');
