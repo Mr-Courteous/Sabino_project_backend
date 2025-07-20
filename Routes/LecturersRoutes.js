@@ -171,78 +171,6 @@ router.get('/api/lecturer/:lecturerId/courses-taught', AllProtection, async (req
 
 
 
-// GET ROUTE: Get all students enrolled in a particular course
-// This route allows a lecturer to retrieve a list of students enrolled in a specific course.
-// It now expects the 'courseId' in the URL path to be the human-readable course code (e.g., "BIO 203").
-// Optional query parameters: academicYear, semester
-// Example: GET /api/grades/course/BIO 203/students?academicYear=2025-2026&semester=Fall
-router.get('/api/grades/course/:courseId/students', AllProtection, async (req, res) => {
-    const { courseId } = req.params; // This is now the human-readable course code
-    const { academicYear, semester } = req.query;
-
-    try {
-        // 1. Find the Course document using the human-readable courseId
-        const courseExists = await Course.findOne({ courseId: courseId });
-        if (!courseExists) {
-            return res.status(404).json({ message: `Course with code '${courseId}' not found.` });
-        }
-
-        // Use the MongoDB _id of the found course for the enrollment query
-        const mongoCourseId = courseExists._id;
-
-        // Build the query object for enrollments
-        let query = {
-            course: mongoCourseId // Use the MongoDB _id here
-        };
-
-        if (academicYear) {
-            query.academicYear = academicYear;
-        }
-        if (semester) {
-            query.semester = semester;
-        }
-
-        // 2. Find all enrollments matching the criteria
-        const enrollments = await Enrollment.find(query)
-            .populate('student', 'name email phoneNumber registrationNumber department')
-            .populate('course', 'courseName courseId department')
-            .lean();
-
-        if (!enrollments || enrollments.length === 0) {
-            return res.status(404).json({ message: `No students found enrolled in course '${courseId}' for the specified criteria.` });
-        }
-
-        // Extract student details from enrollments and include their scores
-        const studentsEnrolled = enrollments.map(enrollment => ({
-            studentId: enrollment.student._id,
-            name: enrollment.student.name,
-            email: enrollment.student.email,
-            phoneNumber: enrollment.student.phoneNumber,
-            registrationNumber: enrollment.student.registrationNumber,
-            department: enrollment.student.department,
-            courseTitle: enrollment.course.courseName,
-            courseCode: enrollment.course.courseId,
-            enrollmentId: enrollment._id,
-            academicYear: enrollment.academicYear,
-            semester: enrollment.semester,
-            caScore: enrollment.caScore,
-            examScore: enrollment.examScore,
-            finalGrade: enrollment.finalGrade,
-            status: enrollment.status
-        }));
-
-        res.status(200).json({
-            message: `Students enrolled in ${courseExists.courseName} (${courseExists.courseId})`,
-            totalStudents: studentsEnrolled.length,
-            students: studentsEnrolled
-        });
-
-    } catch (error) {
-        console.error('Error fetching enrolled students:', error);
-        res.status(500).json({ message: 'Server error while fetching enrolled students.' });
-    }
-});
-
 
 // GET /api/student/:studentId/results
 // This route allows a student (or an authorized user) to retrieve all their course results
@@ -421,6 +349,90 @@ router.get('/api/students/search', AllProtection, async (req, res) => {
     }
 });
 
+
+
+
+// GET ROUTE: Get all students enrolled in a particular course
+// This route allows a lecturer to retrieve a list of students enrolled in a specific course.
+// It now expects the 'courseId' in the URL path to be the human-readable course code (e.g., "BIO 203").
+// Optional query parameters: academicYear, semester
+// Example: GET /api/grades/course/BIO 203/students?academicYear=2025-2026&semester=Fall
+router.get('/api/grades/course/:courseId/students', AllProtection, async (req, res) => {
+    const { courseId } = req.params; // This is now the human-readable course code
+    const { academicYear, semester } = req.query;
+
+    try {
+        // 1. Find the Course document using the human-readable courseId
+        // Normalize the input courseId for regex construction:
+        // Escape special regex characters and replace spaces with \s*
+        const escapedCourseId = courseId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex special characters
+        // Replace one or more spaces with \s* to match any whitespace variations in the DB
+        const regexPattern = escapedCourseId.replace(/\s+/g, '\\s*');
+
+        // Use a regex to find the course, making it case-insensitive and matching the full string
+        const courseExists = await Course.findOne({
+            courseId: { $regex: new RegExp(`^${regexPattern}$`, 'i') } // Case-insensitive regex match, exact start and end
+        });
+
+        if (!courseExists) {
+            return res.status(404).json({ message: `Course with code '${courseId}' not found.` });
+        }
+
+        // Use the MongoDB _id of the found course for the enrollment query
+        const mongoCourseId = courseExists._id;
+
+        // Build the query object for enrollments
+        let query = {
+            course: mongoCourseId // Use the MongoDB _id here
+        };
+
+        if (academicYear) {
+            query.academicYear = academicYear;
+        }
+        if (semester) {
+            query.semester = semester;
+        }
+
+        // 2. Find all enrollments matching the criteria
+        const enrollments = await Enrollment.find(query)
+            .populate('student', 'name email phoneNumber registrationNumber department')
+            .populate('course', 'courseName courseId department')
+            .lean();
+
+        if (!enrollments || enrollments.length === 0) {
+            return res.status(404).json({ message: `No students found enrolled in course '${courseExists.courseName}' (${courseExists.courseId}) for the specified criteria.` });
+        }
+
+        // Extract student details from enrollments and include their scores
+        const studentsEnrolled = enrollments.map(enrollment => ({
+            studentId: enrollment.student._id,
+            name: enrollment.student.name,
+            email: enrollment.student.email,
+            phoneNumber: enrollment.student.phoneNumber,
+            registrationNumber: enrollment.student.registrationNumber,
+            department: enrollment.student.department,
+            courseTitle: enrollment.course.courseName,
+            courseCode: enrollment.course.courseId,
+            enrollmentId: enrollment._id,
+            academicYear: enrollment.academicYear,
+            semester: enrollment.semester,
+            caScore: enrollment.caScore,
+            examScore: enrollment.examScore,
+            finalGrade: enrollment.finalGrade,
+            status: enrollment.status
+        }));
+
+        res.status(200).json({
+            message: `Students enrolled in ${courseExists.courseName} (${courseExists.courseId})`,
+            totalStudents: studentsEnrolled.length,
+            students: studentsEnrolled
+        });
+
+    } catch (error) {
+        console.error('Error fetching enrolled students:', error);
+        res.status(500).json({ message: 'Server error while fetching enrolled students.' });
+    }
+});
 
 
 // --- NEW ROUTE: Export Course Grades to CSV ---
