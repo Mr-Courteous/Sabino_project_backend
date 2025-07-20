@@ -12,12 +12,13 @@ const jwt = require('jsonwebtoken'); // Keep this if you use jwt directly elsewh
 // GET /api/student/dashboard/:studentId
 // This route retrieves a student's profile and a list of their enrolled courses
 // with associated scores and status.
-router.get('/api/student/dashboard/:studentId', AllProtection, async (req, res) => {
+router.get('/api/student/dashboard/:studentId', AllProtection, async (req, res) => { // <--- ADDED AllProtection middleware here
     const { studentId } = req.params;
 
     // Security check: Ensure the authenticated user (from token) matches the requested studentId
     // This prevents one student from viewing another student's dashboard by changing the URL ID.
-    if (req.user !== studentId) {
+    // Ensure req.user exists and its ID matches the studentId from params, and the role is 'student'.
+    if (!req.user || req.user.id !== studentId || req.user.role !== 'student') { // <--- CORRECTED comparison
         return res.status(403).json({ message: 'Forbidden: You can only view your own dashboard.' });
     }
 
@@ -71,7 +72,6 @@ router.get('/api/student/dashboard/:studentId', AllProtection, async (req, res) 
         res.status(500).json({ message: 'Server error while fetching student dashboard data.' });
     }
 });
-
 
 
 module.exports = router;
