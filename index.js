@@ -35,7 +35,7 @@ app.use(PaymentRoute);
 app.use(LecturersGetRoutes);
 
 app.get('/', (req, res) => {
-    res.send('Hey, Express server is up and running!');
+    res.send('Hey, Express server is up and running right now until you stop it!');
 });
 
 app.listen(PORT, () => {
